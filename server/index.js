@@ -57,31 +57,66 @@ app.get('/api/videos', async (req, res) => {
 // 날짜별 동영상 조회 (현재 날짜 기준으로 플레이할 동영상)
 app.get('/api/videos/current', async (req, res) => {
   try {
-    const now = new Date().toISOString().split('T')[0]; // YYYY-MM-DD 형식
+    // 한국 시간(KST, UTC+9) 기준 현재 시간
+    const now = new Date();
+    // 한국 시간으로 변환 (UTC + 9시간)
+    const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000));
     
-    // 오늘 이후 날짜의 동영상 중 가장 가까운 미래 날짜의 동영상 찾기
-    const { data, error } = await supabase
+    // 한국 시간의 년, 월, 일, 시 추출
+    const year = nowKST.getUTCFullYear();
+    const month = String(nowKST.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(nowKST.getUTCDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`; // YYYY-MM-DD 형식
+    const currentHour = nowKST.getUTCHours(); // 한국 시간의 시 (0-23)
+    
+    // 모든 동영상 조회 (날짜순 정렬)
+    const { data: allVideos, error: fetchError } = await supabase
       .from('sionautoplay')
       .select('*')
-      .gte('date', now)
-      .order('date', { ascending: true })
-      .limit(1);
+      .order('date', { ascending: true });
     
-    if (error) throw error;
+    if (fetchError) throw fetchError;
     
-    if (!data || data.length === 0) {
+    if (!allVideos || allVideos.length === 0) {
       return res.json(null);
     }
     
-    const video = data[0];
+    // 한국 시간 기준으로 현재 재생할 동영상 찾기
+    let selectedVideo = null;
+    
+    for (const video of allVideos) {
+      const videoDate = video.date; // YYYY-MM-DD 형식
+      
+      // 오늘 날짜인 경우
+      if (videoDate === currentDate) {
+        // 오전 11시 이전이면 오늘 동영상 재생
+        if (currentHour < 11) {
+          selectedVideo = video;
+          break;
+        }
+        // 오전 11시 이후면 다음 동영상으로 넘어감 (계속 반복)
+        continue;
+      }
+      
+      // 미래 날짜인 경우 재생
+      if (videoDate > currentDate) {
+        selectedVideo = video;
+        break;
+      }
+    }
+    
+    if (!selectedVideo) {
+      return res.json(null);
+    }
+    
     // 데이터베이스 스키마를 API 응답 형식에 맞게 변환
     res.json({
-      id: video.id,
-      url: video.url,
-      videoId: video.video_id,
-      date: video.date,
-      title: video.title,
-      createdAt: video.created_at
+      id: selectedVideo.id,
+      url: selectedVideo.url,
+      videoId: selectedVideo.video_id,
+      date: selectedVideo.date,
+      title: selectedVideo.title,
+      createdAt: selectedVideo.created_at
     });
   } catch (error) {
     console.error('Error fetching current video:', error);
