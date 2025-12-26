@@ -72,3 +72,4 @@ Railway는 자동으로 다음을 실행합니다:
 - `npm run build` (프론트엔드 빌드)
 - `npm start` 또는 `node server/index.js` (서버 시작)
 
+

@@ -5,4 +5,6 @@ server/data/
 *.log
 dist/
 build/
+.env
+.env.local
 
