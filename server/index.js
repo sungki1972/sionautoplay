@@ -82,29 +82,66 @@ app.get('/api/videos/current', async (req, res) => {
     }
     
     // 한국 시간 기준으로 현재 재생할 동영상 찾기
+    // 로직: 각 동영상은 해당 날짜 오전 11시까지 재생
+    // 예: 26.1.1 동영상은 25.12.29 ~ 26.1.1 11:00까지 재생
+    //     26.1.4 동영상은 26.1.1 11:00 ~ 26.1.4 11:00까지 재생
     let selectedVideo = null;
-    
-    for (const video of allVideos) {
+
+    for (let i = 0; i < allVideos.length; i++) {
+      const video = allVideos[i];
       const videoDate = video.date; // YYYY-MM-DD 형식
-      
-      // 오늘 날짜인 경우
-      if (videoDate === currentDate) {
-        // 오전 11시 이전이면 오늘 동영상 재생
-        if (currentHour < 11) {
-          selectedVideo = video;
-          break;
-        }
-        // 오전 11시 이후면 다음 동영상으로 넘어감 (계속 반복)
-        continue;
-      }
-      
-      // 미래 날짜인 경우 재생
+
+      // 동영상 날짜가 오늘보다 미래인 경우
       if (videoDate > currentDate) {
         selectedVideo = video;
         break;
       }
+
+      // 동영상 날짜가 오늘인 경우
+      if (videoDate === currentDate) {
+        // 오전 11시 이전이면 이 동영상 재생
+        if (currentHour < 11) {
+          selectedVideo = video;
+          break;
+        }
+        // 오전 11시 이후면 다음 동영상 찾기
+        // 다음 동영상이 있으면 그것을 재생, 없으면 현재 동영상 계속 재생
+        if (i + 1 < allVideos.length) {
+          selectedVideo = allVideos[i + 1];
+        } else {
+          // 마지막 동영상인 경우 계속 재생
+          selectedVideo = video;
+        }
+        break;
+      }
+
+      // 동영상 날짜가 과거인 경우
+      if (videoDate < currentDate) {
+        // 다음 동영상이 있는지 확인
+        if (i + 1 < allVideos.length) {
+          const nextVideo = allVideos[i + 1];
+          const nextVideoDate = nextVideo.date;
+
+          // 다음 동영상이 오늘이거나 미래인 경우
+          if (nextVideoDate >= currentDate) {
+            continue; // 다음 반복으로 넘어가서 처리
+          }
+          // 다음 동영상도 과거인 경우 계속 진행
+          continue;
+        } else {
+          // 마지막 동영상이고 과거 날짜인 경우 = 계속 재생
+          selectedVideo = video;
+          break;
+        }
+      }
     }
-    
+
+    // 동영상이 하나도 없는 경우에만 null 반환
+    if (!selectedVideo && allVideos.length > 0) {
+      // 혹시 모를 경우를 대비해 첫 번째 동영상 반환
+      selectedVideo = allVideos[0];
+    }
+
     if (!selectedVideo) {
       return res.json(null);
     }
