@@ -8,6 +8,48 @@ function Home() {
 
   useEffect(() => {
     fetchCurrentVideo()
+    
+    // 오전 11시에 자동으로 다음 동영상으로 전환하기 위한 주기적 체크
+    const checkAndUpdateVideo = () => {
+      const now = new Date()
+      const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000)) // UTC + 9시간
+      const currentHour = nowKST.getUTCHours()
+      const currentMinute = nowKST.getUTCMinutes()
+      
+      // 오전 11시 정각에 동영상 갱신
+      if (currentHour === 11 && currentMinute === 0) {
+        console.log('11시 정각 - 동영상 갱신')
+        fetchCurrentVideo()
+      }
+    }
+    
+    // 매 분마다 시간 체크 (오전 11시 감지용)
+    const intervalId = setInterval(checkAndUpdateVideo, 60000) // 1분마다 체크
+    
+    // 오전 11시까지 남은 시간 계산하여 타이머 설정
+    const setNextUpdateTimer = () => {
+      const now = new Date()
+      const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000))
+      const currentHour = nowKST.getUTCHours()
+      const currentMinute = nowKST.getUTCMinutes()
+      
+      // 오전 11시 이전이면 11시까지 남은 시간 계산
+      if (currentHour < 11) {
+        const minutesUntil11 = (11 - currentHour) * 60 - currentMinute
+        const millisecondsUntil11 = minutesUntil11 * 60 * 1000
+        
+        setTimeout(() => {
+          console.log('오전 11시 도달 - 동영상 갱신')
+          fetchCurrentVideo()
+        }, millisecondsUntil11)
+      }
+    }
+    
+    setNextUpdateTimer()
+    
+    return () => {
+      clearInterval(intervalId)
+    }
   }, [])
 
   const fetchCurrentVideo = async () => {
@@ -15,7 +57,14 @@ function Home() {
       const response = await fetch('/api/videos/current')
       if (response.ok) {
         const data = await response.json()
-        setVideo(data)
+        setVideo(prevVideo => {
+          // 동영상이 변경되었는지 확인
+          if (!prevVideo || prevVideo.id !== data.id) {
+            console.log('동영상 변경됨:', data.title)
+            return data
+          }
+          return data // 동일한 동영상이어도 업데이트 (날짜 정보 등)
+        })
       } else {
         setVideo(null)
       }
