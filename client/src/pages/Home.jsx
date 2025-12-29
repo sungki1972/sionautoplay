@@ -3,50 +3,54 @@ import './Home.css'
 
 function Home() {
   const [video, setVideo] = useState(null)
+  const [upcomingVideos, setUpcomingVideos] = useState([])
   const [loading, setLoading] = useState(true)
   const playerRef = useRef(null)
 
   useEffect(() => {
     fetchCurrentVideo()
-    
+    fetchUpcomingVideos()
+
     // 오전 11시에 자동으로 다음 동영상으로 전환하기 위한 주기적 체크
     const checkAndUpdateVideo = () => {
       const now = new Date()
       const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000)) // UTC + 9시간
       const currentHour = nowKST.getUTCHours()
       const currentMinute = nowKST.getUTCMinutes()
-      
+
       // 오전 11시 정각에 동영상 갱신
       if (currentHour === 11 && currentMinute === 0) {
         console.log('11시 정각 - 동영상 갱신')
         fetchCurrentVideo()
+        fetchUpcomingVideos()
       }
     }
-    
+
     // 매 분마다 시간 체크 (오전 11시 감지용)
     const intervalId = setInterval(checkAndUpdateVideo, 60000) // 1분마다 체크
-    
+
     // 오전 11시까지 남은 시간 계산하여 타이머 설정
     const setNextUpdateTimer = () => {
       const now = new Date()
       const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000))
       const currentHour = nowKST.getUTCHours()
       const currentMinute = nowKST.getUTCMinutes()
-      
+
       // 오전 11시 이전이면 11시까지 남은 시간 계산
       if (currentHour < 11) {
         const minutesUntil11 = (11 - currentHour) * 60 - currentMinute
         const millisecondsUntil11 = minutesUntil11 * 60 * 1000
-        
+
         setTimeout(() => {
           console.log('오전 11시 도달 - 동영상 갱신')
           fetchCurrentVideo()
+          fetchUpcomingVideos()
         }, millisecondsUntil11)
       }
     }
-    
+
     setNextUpdateTimer()
-    
+
     return () => {
       clearInterval(intervalId)
     }
@@ -74,6 +78,25 @@ function Home() {
     } finally {
       setLoading(false)
     }
+  }
+
+  const fetchUpcomingVideos = async () => {
+    try {
+      const response = await fetch('/api/videos/upcoming')
+      if (response.ok) {
+        const data = await response.json()
+        setUpcomingVideos(data)
+      } else {
+        setUpcomingVideos([])
+      }
+    } catch (error) {
+      console.error('Error fetching upcoming videos:', error)
+      setUpcomingVideos([])
+    }
+  }
+
+  const playVideo = (selectedVideo) => {
+    setVideo(selectedVideo)
   }
 
   useEffect(() => {
@@ -198,13 +221,42 @@ function Home() {
 
   return (
     <div className="home-container">
-      <div className="video-info">
-        <h2>{video.title}</h2>
-        <p>재생 날짜: {new Date(video.date).toLocaleDateString('ko-KR')}</p>
+      <div className="main-content">
+        <div className="video-info">
+          <h2>{video.title}</h2>
+          <p>재생 날짜: {new Date(video.date).toLocaleDateString('ko-KR')}</p>
+        </div>
+        <div className="video-wrapper">
+          <div id="youtube-player"></div>
+        </div>
       </div>
-      <div className="video-wrapper">
-        <div id="youtube-player"></div>
-      </div>
+
+      {upcomingVideos.length > 0 && (
+        <div className="upcoming-videos">
+          <h3>예정된 동영상</h3>
+          <div className="upcoming-list">
+            {upcomingVideos.map((upcomingVideo) => (
+              <div
+                key={upcomingVideo.id}
+                className="upcoming-item"
+                onClick={() => playVideo(upcomingVideo)}
+              >
+                <div className="upcoming-thumbnail">
+                  <img
+                    src={`https://img.youtube.com/vi/${upcomingVideo.videoId}/mqdefault.jpg`}
+                    alt={upcomingVideo.title}
+                  />
+                  <div className="play-overlay">▶</div>
+                </div>
+                <div className="upcoming-info">
+                  <h4>{upcomingVideo.title}</h4>
+                  <p>{new Date(upcomingVideo.date).toLocaleDateString('ko-KR')}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

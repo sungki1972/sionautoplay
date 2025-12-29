@@ -73,7 +73,8 @@ function Admin() {
         fetchVideos()
       } else {
         const error = await response.json()
-        alert(error.error || '오류가 발생했습니다.')
+        console.error('Server error:', error)
+        alert(`오류: ${error.error || '알 수 없는 오류가 발생했습니다.'}\n\nURL: ${formData.url}\n상태 코드: ${response.status}`)
       }
     } catch (error) {
       console.error('Error saving video:', error)

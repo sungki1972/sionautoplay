@@ -22,9 +22,31 @@ supabase.from('sionautoplay').select('count').limit(1)
 
 // YouTube URL에서 비디오 ID 추출
 function extractVideoId(url) {
-  const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
-  const match = url.match(regExp);
-  return (match && match[7].length === 11) ? match[7] : null;
+  // youtu.be/ 형식 처리 (예: https://youtu.be/VIDEO_ID 또는 https://youtu.be/VIDEO_ID?list=...)
+  const shortUrlMatch = url.match(/youtu\.be\/([a-zA-Z0-9_-]{11})/);
+  if (shortUrlMatch) {
+    return shortUrlMatch[1];
+  }
+
+  // youtube.com/watch?v= 형식 처리 (예: https://www.youtube.com/watch?v=VIDEO_ID)
+  const longUrlMatch = url.match(/[?&]v=([a-zA-Z0-9_-]{11})/);
+  if (longUrlMatch) {
+    return longUrlMatch[1];
+  }
+
+  // youtube.com/embed/ 형식 처리
+  const embedMatch = url.match(/\/embed\/([a-zA-Z0-9_-]{11})/);
+  if (embedMatch) {
+    return embedMatch[1];
+  }
+
+  // youtube.com/v/ 형식 처리
+  const vMatch = url.match(/\/v\/([a-zA-Z0-9_-]{11})/);
+  if (vMatch) {
+    return vMatch[1];
+  }
+
+  return null;
 }
 
 // 모든 동영상 조회
@@ -61,26 +83,26 @@ app.get('/api/videos/current', async (req, res) => {
     const now = new Date();
     // 한국 시간으로 변환 (UTC + 9시간)
     const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000));
-    
+
     // 한국 시간의 년, 월, 일, 시 추출
     const year = nowKST.getUTCFullYear();
     const month = String(nowKST.getUTCMonth() + 1).padStart(2, '0');
     const day = String(nowKST.getUTCDate()).padStart(2, '0');
     const currentDate = `${year}-${month}-${day}`; // YYYY-MM-DD 형식
     const currentHour = nowKST.getUTCHours(); // 한국 시간의 시 (0-23)
-    
+
     // 모든 동영상 조회 (날짜순 정렬)
     const { data: allVideos, error: fetchError } = await supabase
       .from('sionautoplay')
       .select('*')
       .order('date', { ascending: true });
-    
+
     if (fetchError) throw fetchError;
-    
+
     if (!allVideos || allVideos.length === 0) {
       return res.json(null);
     }
-    
+
     // 한국 시간 기준으로 현재 재생할 동영상 찾기
     // 로직: 각 동영상은 해당 날짜 오전 11시까지 재생
     // 예: 26.1.1 동영상은 25.12.29 ~ 26.1.1 11:00까지 재생
@@ -145,7 +167,7 @@ app.get('/api/videos/current', async (req, res) => {
     if (!selectedVideo) {
       return res.json(null);
     }
-    
+
     // 데이터베이스 스키마를 API 응답 형식에 맞게 변환
     res.json({
       id: selectedVideo.id,
@@ -157,6 +179,94 @@ app.get('/api/videos/current', async (req, res) => {
     });
   } catch (error) {
     console.error('Error fetching current video:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 예정된 동영상 리스트 조회 (현재 재생 중인 동영상 이후)
+app.get('/api/videos/upcoming', async (req, res) => {
+  try {
+    // 한국 시간(KST, UTC+9) 기준 현재 시간
+    const now = new Date();
+    const nowKST = new Date(now.getTime() + (9 * 60 * 60 * 1000));
+
+    const year = nowKST.getUTCFullYear();
+    const month = String(nowKST.getUTCMonth() + 1).padStart(2, '0');
+    const day = String(nowKST.getUTCDate()).padStart(2, '0');
+    const currentDate = `${year}-${month}-${day}`;
+    const currentHour = nowKST.getUTCHours();
+
+    // 모든 동영상 조회 (날짜순 정렬)
+    const { data: allVideos, error: fetchError } = await supabase
+      .from('sionautoplay')
+      .select('*')
+      .order('date', { ascending: true });
+
+    if (fetchError) throw fetchError;
+
+    if (!allVideos || allVideos.length === 0) {
+      return res.json([]);
+    }
+
+    // 현재 재생 중인 동영상의 인덱스 찾기
+    let currentVideoIndex = -1;
+
+    for (let i = 0; i < allVideos.length; i++) {
+      const video = allVideos[i];
+      const videoDate = video.date;
+
+      if (videoDate > currentDate) {
+        currentVideoIndex = i;
+        break;
+      }
+
+      if (videoDate === currentDate) {
+        if (currentHour < 11) {
+          currentVideoIndex = i;
+          break;
+        }
+        if (i + 1 < allVideos.length) {
+          currentVideoIndex = i + 1;
+        } else {
+          currentVideoIndex = i;
+        }
+        break;
+      }
+
+      if (videoDate < currentDate) {
+        if (i + 1 < allVideos.length) {
+          const nextVideo = allVideos[i + 1];
+          const nextVideoDate = nextVideo.date;
+          if (nextVideoDate >= currentDate) {
+            continue;
+          }
+          continue;
+        } else {
+          currentVideoIndex = i;
+          break;
+        }
+      }
+    }
+
+    if (currentVideoIndex === -1 && allVideos.length > 0) {
+      currentVideoIndex = 0;
+    }
+
+    // 현재 재생 중인 동영상 이후의 동영상들만 반환
+    const upcomingVideos = allVideos
+      .slice(currentVideoIndex + 1)
+      .map(video => ({
+        id: video.id,
+        url: video.url,
+        videoId: video.video_id,
+        date: video.date,
+        title: video.title,
+        createdAt: video.created_at
+      }));
+
+    res.json(upcomingVideos);
+  } catch (error) {
+    console.error('Error fetching upcoming videos:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -216,13 +326,19 @@ app.get('/api/videos/paginated', async (req, res) => {
 app.post('/api/videos', async (req, res) => {
   try {
     const { url, date, title } = req.body;
-    
+
+    console.log('POST /api/videos - Request body:', { url, date, title });
+
     if (!url || !date) {
+      console.log('Validation failed: Missing url or date');
       return res.status(400).json({ error: 'URL and date are required' });
     }
-    
+
     const videoId = extractVideoId(url);
+    console.log('Extracted video ID:', videoId, 'from URL:', url);
+
     if (!videoId) {
+      console.log('Video ID extraction failed for URL:', url);
       return res.status(400).json({ error: 'Invalid YouTube URL' });
     }
     
