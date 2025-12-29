@@ -3,6 +3,10 @@
   "version": "1.0.0",
   "description": "YouTube video scheduler with date-based auto play",
   "main": "server/index.js",
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  },
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",
     "server": "node server/index.js",
