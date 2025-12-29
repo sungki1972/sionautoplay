@@ -221,15 +221,17 @@ function Home() {
 
   return (
     <div className="home-container">
-      <div className="main-content">
-        <div className="video-info">
-          <h2>{video.title}</h2>
-          <p>재생 날짜: {new Date(video.date).toLocaleDateString('ko-KR')}</p>
+      {video && (
+        <div className="main-content">
+          <div className="video-info">
+            <h2>{video.title}</h2>
+            <p>재생 날짜: {new Date(video.date).toLocaleDateString('ko-KR')}</p>
+          </div>
+          <div className="video-wrapper">
+            <div id="youtube-player"></div>
+          </div>
         </div>
-        <div className="video-wrapper">
-          <div id="youtube-player"></div>
-        </div>
-      </div>
+      )}
 
       {upcomingVideos.length > 0 && (
         <div className="upcoming-videos">
